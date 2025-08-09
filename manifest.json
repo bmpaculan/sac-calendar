@@ -1,0 +1,67 @@
+{
+  "id": "com.example.sac.calendar",
+  "name": "Color-Coded Availability Calendar",
+  "description": "Responsive, legend-driven availability calendar with dynamic legend and SAC data binding.",
+  "vendor": "Your Company",
+  "version": "1.3.2",
+
+  "newInstancePrefix": "calendar",
+
+  "webcomponents": [
+    {
+      "kind": "main",
+      "tag": "com-example-sac-calendar",
+      "url": "calendar.js",
+      "integrity": "",
+      "ignoreIntegrity": true
+    },
+    {
+      "kind": "styling",
+      "tag": "com-example-sac-calendar-styling",
+      "url": "calendar_styling.js",
+      "integrity": "",
+      "ignoreIntegrity": true
+    },
+    {
+      "kind": "builder",
+      "tag": "com-example-sac-calendar-builder",
+      "url": "calendar_builder.js",
+      "integrity": "",
+      "ignoreIntegrity": true
+    }
+  ],
+
+  "properties": {
+    "startMonth": { "type": "string", "default": "" },
+    "endMonth":   { "type": "string", "default": "" },
+    "employeeName": { "type": "string", "default": "Employee" },
+    "darkMode": { "type": "boolean", "default": true },
+
+    "autoLegend": { "type": "boolean", "default": true },
+    "statusInfoJson": {
+      "type": "string",
+      "default": "{\"Rostered Shift\":\"#66bb6a\",\"Unplanned Leave\":\"#e53935\",\"LWOP\":\"#fdd835\",\"Compassionate Leave\":\"#29b6f6\",\"Accident Pay\":\"#8e24aa\",\"AL\":\"#ffa726\",\"Public Holiday - Not Req\":\"#90a4ae\"}"
+    },
+    "paletteJson": {
+      "type": "string",
+      "default": "[\"#66bb6a\",\"#e57373\",\"#64b5f6\",\"#ffb74d\",\"#ba68c8\",\"#4db6ac\",\"#ffd54f\",\"#90a4ae\",\"#81c784\",\"#f06292\"]"
+    },
+
+    "style_headerBg": { "type": "string", "default": "#f7f9fb" },
+    "style_border":   { "type": "string", "default": "#d9dee2" },
+    "style_text":     { "type": "string", "default": "#37474f" },
+    "style_cardBg":   { "type": "string", "default": "#ffffff" }
+  },
+
+  "dataBindings": {
+    "main": {
+      "feeds": [
+        { "id": "date",   "type": "dimension" },
+        { "id": "status", "type": "dimension" }
+      ]
+    }
+  },
+
+  "methods": {},
+  "events": {}
+}
