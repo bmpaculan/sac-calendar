@@ -17,7 +17,8 @@
       .title{font-size:.9rem;font-weight:600;margin:0 8px 0 0}
 
       .calendars{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));}
-      .cal{border:1px solid var(--bdr,#d9dee2);border-radius:12px;overflow:hidden;background:var(--bg,#fff);display:flex;flex-direction:column;max-width:100%}
+      .cal{border:1px solid var(--bdr,#d9dee2);border-radius:12px;overflow:hidden;background:var(--bg,#fff);
+           display:flex;flex-direction:column;max-width:100%}
       .cal-header{display:flex;align-items:center;padding:8px 10px;background:var(--hd,#f7f9fb);
         border-bottom:1px solid var(--bdr,#d9dee2);font-weight:600}
       .grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));width:100%;}
@@ -73,18 +74,6 @@
     return `rgba(${r},${g},${b},${a})`;
   }
 
-  function monthRangeFromPropsOrData(startMonth, endMonth, daysMap){
-    if (startMonth && endMonth) {
-      return rangeMonths(startMonth, endMonth);
-    }
-    // derive from data
-    const dates = Object.keys(daysMap).sort();
-    if (!dates.length) return [];
-    const s = dates[0].slice(0,7);
-    const e = dates[dates.length-1].slice(0,7);
-    return rangeMonths(s, e);
-  }
-
   function rangeMonths(startYYYYMM, endYYYYMM){
     const [sy, sm] = startYYYYMM.split("-").map(Number);
     const [ey, em] = endYYYYMM.split("-").map(Number);
@@ -94,7 +83,18 @@
     return out;
   }
 
-  // Parse binding rows (common shapes)
+  function monthRangeFromPropsOrData(startMonth, endMonth, daysMap){
+    if (startMonth && endMonth) {
+      return rangeMonths(startMonth, endMonth);
+    }
+    const dates = Object.keys(daysMap).sort();
+    if (!dates.length) return [];
+    const s = dates[0].slice(0,7);
+    const e = dates[dates.length-1].slice(0,7);
+    return rangeMonths(s, e);
+  }
+
+  // --- Binding helpers: read rows for FEED ids ("date","status")
   function rowsFromBinding(binding){
     const dataBlock = binding?.data?.data ?? binding?.data ?? binding;
     const rows = Array.isArray(dataBlock?.rows) ? dataBlock.rows
@@ -103,22 +103,40 @@
     return rows;
   }
 
-  function buildDaysMap(rows){
+  function readBindingDays(binding){
+    if (!binding) return {};
+    const dataBlock = binding?.data?.data ?? binding?.data ?? binding;
+    const rows = rowsFromBinding(binding);
+
+    // Map FEED ids by dimension metadata if provided
+    const feedMap = { date: "date", status: "status" };
+    const dimsMeta = binding.dimensions || dataBlock.dimensions || null;
+    if (dimsMeta && Array.isArray(dimsMeta)) {
+      feedMap.date   = dimsMeta[0]?.id || "date";
+      feedMap.status = dimsMeta[1]?.id || "status";
+    }
+
     const out = {};
     rows.forEach(r=>{
       let dateVal, statusVal;
+
       if (r && r.dimensions) {
-        dateVal   = r.dimensions.date ?? r.dimensions.Date ?? r.dimensions["date"];
-        statusVal = r.dimensions.status ?? r.dimensions.Status ?? r.dimensions["status"];
+        // Most common: r.dimensions keyed by dim IDs
+        dateVal   = r.dimensions[feedMap.date]   ?? r.dimensions.date   ?? r.dimensions.Date;
+        statusVal = r.dimensions[feedMap.status] ?? r.dimensions.status ?? r.dimensions.Status;
       } else if (Array.isArray(r)) {
+        // Array row: assume [date, status] order
         dateVal = r[0]; statusVal = r[1];
       } else if (r && typeof r === "object") {
-        dateVal   = r.date ?? r.Date ?? r["date"];
-        statusVal = r.status ?? r.Status ?? r["status"];
+        // Flat object
+        dateVal   = r[feedMap.date]   ?? r.date   ?? r.Date;
+        statusVal = r[feedMap.status] ?? r.status ?? r.Status;
       }
+
       const iso = toISODate(dateVal);
       if (iso && statusVal!=null) out[iso] = String(statusVal);
     });
+
     return out;
   }
 
@@ -126,19 +144,13 @@
     return Array.from(new Set(Object.values(daysMap))).filter(v => v!=null && v!=="");
   }
 
-  function resolveLegend({autoLegend, overrides, palette, statuses}){
-    // Start with overrides (status -> color)
-    const legend = {};
-    Object.entries(overrides || {}).forEach(([k,v])=>{
-      if (k && v) legend[k] = v;
-    });
-    // Fill remaining statuses using palette
-    let idx = 0;
+  function resolveLegend({overrides, palette, statuses}){
+    const legend = {...(overrides||{})};
+    let i=0;
+    const pal = (Array.isArray(palette) && palette.length) ? palette
+      : ["#66bb6a","#e57373","#64b5f6","#ffb74d","#ba68c8","#4db6ac","#ffd54f","#90a4ae","#81c784","#f06292"];
     statuses.forEach(s=>{
-      if (!legend[s]) {
-        legend[s] = palette[idx % palette.length] || "#90a4ae";
-        idx++;
-      }
+      if(!legend[s]) legend[s] = pal[i++ % pal.length];
     });
     return legend;
   }
@@ -150,23 +162,32 @@
       this._shadow = this.attachShadow({mode:'open'});
       this._shadow.appendChild(tpl.content.cloneNode(true));
       this._props = {
+        // core
         startMonth: "",
         endMonth: "",
         employeeName: "Employee",
         darkMode: true,
+
+        // legend
         autoLegend: true,
-        statusInfoJson: "{}",
+        statusInfoJson: "{}", // overrides
         paletteJson: "[]",
+
+        // styling
         style_headerBg: "#f7f9fb",
         style_border: "#d9dee2",
         style_text: "#37474f",
-        style_cardBg: "#ffffff"
+        style_cardBg: "#ffffff",
+
+        // optional JSON fallback
+        daysJson: "{}"
       };
       this.$legend = this._shadow.getElementById('legend');
       this.$calendars = this._shadow.getElementById('calendars');
       this._shadow.getElementById('empName').textContent = "";
     }
 
+    // SAC lifecycle
     onCustomWidgetBeforeUpdate(changedProps) {
       Object.assign(this._props, changedProps);
       if (changedProps.dataBindings) this._dataBindings = changedProps.dataBindings;
@@ -181,40 +202,27 @@
       root.setProperty("--bdr", this._props.style_border   || "#d9dee2");
       root.setProperty("--ink", this._props.style_text     || "#37474f");
 
-      // Name
+      // Name (optional visual)
       this._shadow.getElementById('empName').textContent = this._props.employeeName || "Employee";
 
-      // 1) get days map from JSON
-      let daysFromJson = {};
-      try { daysFromJson = JSON.parse(this._props.daysJson || "{}"); } catch(e){}
+      // 1) JSON fallback (optional)
+      let jsonDays = {};
+      try { jsonDays = JSON.parse(this._props.daysJson || "{}"); } catch(e){}
 
-      // 2) get days map from binding (preferred)
-      const bindingObj = this.dataBindings?.getDataBinding?.("main") || this._dataBindings?.main || null;
-      let daysFromBinding = {};
-      if (bindingObj){
-        const rows = rowsFromBinding(bindingObj);
-        daysFromBinding = buildDaysMap(rows);
-      }
+      // 2) Preferred: binding rows (already filtered by story filters)
+      const binding = this.dataBindings?.getDataBinding?.("main") || this._dataBindings?.main || null;
+      const boundDays = readBindingDays(binding);
+      const daysMap = Object.keys(boundDays).length ? boundDays : jsonDays;
 
-      // prefer binding; fallback to JSON
-      const daysMap = Object.keys(daysFromBinding).length ? daysFromBinding : daysFromJson;
-
-      // Legend: overrides + auto
-      let overrides = {};
-      try { overrides = JSON.parse(this._props.statusInfoJson || "{}"); } catch(e){}
-      let palette = [];
-      try { palette = JSON.parse(this._props.paletteJson || "[]"); } catch(e){}
-      if (!Array.isArray(palette) || !palette.length){
-        palette = ["#66bb6a","#e57373","#64b5f6","#ffb74d","#ba68c8","#4db6ac","#ffd54f","#90a4ae","#81c784","#f06292"];
-      }
-
+      // Legend resolution
+      let overrides = {}; try { overrides = JSON.parse(this._props.statusInfoJson || "{}"); } catch {}
+      let palette = [];  try { palette  = JSON.parse(this._props.paletteJson  || "[]"); } catch {}
       const statuses = uniqueStatuses(daysMap);
-      const legend = this._props.autoLegend ? resolveLegend({autoLegend:true, overrides, palette, statuses})
-                                            : (Object.keys(overrides).length ? overrides : resolveLegend({autoLegend:true, overrides:{}, palette, statuses}));
+      const legend = this._props.autoLegend ? resolveLegend({overrides, palette, statuses})
+                                            : (Object.keys(overrides).length ? overrides : resolveLegend({overrides:{}, palette, statuses}));
 
       this._resolvedLegend = legend;
       this._daysMap = daysMap;
-
       this.render();
     }
 
@@ -227,8 +235,7 @@
       Object.entries(legend).forEach(([label, hex])=>{
         const key = document.createElement("div");
         key.className = "key";
-        const sw = document.createElement("span");
-        sw.className = "swatch"; sw.style.background = hex;
+        const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = hex;
         key.appendChild(sw);
         const t = document.createElement("span"); t.textContent = label;
         key.appendChild(t);

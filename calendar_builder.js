@@ -2,65 +2,89 @@
   const tpl = document.createElement("template");
   tpl.innerHTML = `
     <style>
-      :host{display:block;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;padding:10px}
-      fieldset{border:1px solid #d9dee2;border-radius:8px;padding:10px;margin:0 0 10px}
-      legend{font-weight:600}
-      .row{display:flex;gap:8px;align-items:center;margin:6px 0}
-      .row label{min-width:150px;font-size:.9rem;color:#394b59}
-      input[type="text"], input[type="month"], textarea{
-        width:100%; padding:6px 8px; border:1px solid #c7d0d9; border-radius:6px; font:inherit;
+      :host{display:block;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;padding:10px;color:#1f2937}
+      fieldset{border:1px solid #d9dee2;border-radius:8px;padding:10px;margin:0 0 12px;background:#fff}
+      legend{font-weight:600;padding:0 6px}
+      .row{display:flex;gap:10px;align-items:center;margin:8px 0}
+      .row label{min-width:160px;font-size:.9rem;color:#374151}
+      input[type="text"],input[type="month"],textarea{
+        width:100%;padding:8px 10px;border:1px solid #c7d0d9;border-radius:8px;font:inherit;outline:none
       }
-      textarea{min-height:80px;font-family:ui-monospace,Consolas,monospace}
-      .grid{display:grid;grid-template-columns:1fr;gap:6px}
+      input[type="checkbox"]{transform:translateY(1px)}
+      textarea{min-height:92px;resize:vertical;font-family:ui-monospace,Consolas,Menlo,monospace}
+      .hint{font-size:.8rem;color:#6b7280}
     </style>
-    <form id="form">
+
+    <form id="form" autocomplete="off">
       <fieldset>
-        <legend>Calendar Settings</legend>
-        <div class="grid">
-          <div class="row"><label>Employee Name</label><input id="employeeName" type="text" placeholder="e.g. Bryan Paculan"></div>
-          <div class="row"><label>Start Month (YYYY-MM)</label><input id="startMonth" type="month" placeholder="auto from data"></div>
-          <div class="row"><label>End Month (YYYY-MM)</label><input id="endMonth" type="month" placeholder="auto from data"></div>
-          <div class="row"><label>Dark Mode</label><input id="darkMode" type="checkbox"></div>
+        <legend>Calendar</legend>
+        <div class="row">
+          <label for="employeeName">Employee Name (title)</label>
+          <input id="employeeName" type="text" placeholder="e.g. Bryan Paculan" />
+        </div>
+        <div class="row">
+          <label for="startMonth">Start Month (YYYY-MM)</label>
+          <input id="startMonth" type="month" placeholder="auto from data" />
+        </div>
+        <div class="row">
+          <label for="endMonth">End Month (YYYY-MM)</label>
+          <input id="endMonth" type="month" placeholder="auto from data" />
+        </div>
+        <div class="row">
+          <label for="darkMode">Dark Mode</label>
+          <input id="darkMode" type="checkbox" />
         </div>
       </fieldset>
 
       <fieldset>
         <legend>Legend</legend>
-        <div class="row"><label>Auto Legend (from data)</label><input id="autoLegend" type="checkbox"></div>
-        <div class="row"><label>Overrides (statusInfoJson)</label>
+        <div class="row">
+          <label for="autoLegend">Auto Legend (from Status values)</label>
+          <input id="autoLegend" type="checkbox" />
+        </div>
+        <div class="row">
+          <label for="statusInfoJson">Overrides (status → #hex)</label>
           <textarea id="statusInfoJson" spellcheck="false" placeholder='{"Rostered Shift":"#66bb6a","AL":"#ffa726"}'></textarea>
         </div>
-        <div class="row"><label>Palette (paletteJson)</label>
+        <div class="row">
+          <label for="paletteJson">Palette (array of colors)</label>
           <textarea id="paletteJson" spellcheck="false" placeholder='["#66bb6a","#e57373","#64b5f6","#ffb74d"]'></textarea>
         </div>
+        <div class="hint">Tip: Auto Legend assigns colors for any Status not listed in Overrides using the palette above.</div>
       </fieldset>
 
       <fieldset>
         <legend>Manual Data (optional)</legend>
-        <div class="row"><label>daysJson (YYYY-MM-DD → Status)</label>
+        <div class="row">
+          <label for="daysJson">daysJson (YYYY-MM-DD → Status)</label>
           <textarea id="daysJson" spellcheck="false" placeholder='{"2025-08-12":"Rostered Shift","2025-08-13":"Unplanned Leave"}'></textarea>
         </div>
+        <div class="hint">If a data binding is provided, it will override this JSON.</div>
       </fieldset>
     </form>
   `;
 
   class CalendarBuilder extends HTMLElement {
-    constructor(){
+    constructor() {
       super();
-      this._shadow = this.attachShadow({mode:'open'});
+      this._shadow = this.attachShadow({ mode: 'open' });
       this._shadow.appendChild(tpl.content.cloneNode(true));
-      this.$ = (id)=>this._shadow.getElementById(id);
+      this.$ = (id) => this._shadow.getElementById(id);
+      this._wired = false;
     }
 
-    onCustomWidgetBeforeUpdate(changed){ Object.assign(this, changed); }
+    onCustomWidgetBeforeUpdate(changedProps) {
+      Object.assign(this, changedProps);
+    }
 
-    onCustomWidgetAfterUpdate(){
+    onCustomWidgetAfterUpdate() {
+      // populate current values
       this.$("employeeName").value = this.employeeName || "Employee";
       this.$("startMonth").value   = this.startMonth || "";
       this.$("endMonth").value     = this.endMonth   || "";
       this.$("darkMode").checked   = !!this.darkMode;
 
-      this.$("autoLegend").checked = (this.autoLegend !== false);
+      this.$("autoLegend").checked   = (this.autoLegend !== false);
       this.$("statusInfoJson").value = this.statusInfoJson || "{}";
       this.$("paletteJson").value    = this.paletteJson || "[]";
       this.$("daysJson").value       = this.daysJson || "{}";
@@ -68,32 +92,31 @@
       if (this._wired) return;
       this._wired = true;
 
+      // fire on change/blur to reduce noisy updates while typing
       ["employeeName","startMonth","endMonth","statusInfoJson","paletteJson","daysJson"].forEach(id=>{
-        this.$(id).addEventListener("change", ()=>this._fire());
-        this.$(id).addEventListener("blur", ()=>this._fire());
+        this.$(id).addEventListener("change", () => this._emit());
+        this.$(id).addEventListener("blur",   () => this._emit());
       });
       ["darkMode","autoLegend"].forEach(id=>{
-        this.$(id).addEventListener("change", ()=>this._fire());
+        this.$(id).addEventListener("change", () => this._emit());
       });
     }
 
-    _fire(){
+    _emit() {
       const props = {
-        employeeName: this.$("employeeName").value,
-        startMonth: this.$("startMonth").value,
-        endMonth: this.$("endMonth").value,
-        darkMode: this.$("darkMode").checked,
-
-        autoLegend: this.$("autoLegend").checked,
-        statusInfoJson: this.$("statusInfoJson").value,
-        paletteJson: this.$("paletteJson").value,
-
-        daysJson: this.$("daysJson").value
+        employeeName:  this.$("employeeName").value,
+        startMonth:    this.$("startMonth").value,
+        endMonth:      this.$("endMonth").value,
+        darkMode:      this.$("darkMode").checked,
+        autoLegend:    this.$("autoLegend").checked,
+        statusInfoJson:this.$("statusInfoJson").value,
+        paletteJson:   this.$("paletteJson").value,
+        daysJson:      this.$("daysJson").value
       };
-      this.dispatchEvent(new CustomEvent("propertiesChanged", { detail: { properties: props }}));
+      this.dispatchEvent(new CustomEvent("propertiesChanged", { detail: { properties: props } }));
     }
 
-    onCustomWidgetDestroy(){}
+    onCustomWidgetDestroy() {}
   }
 
   customElements.define("com-example-sac-calendar-builder", CalendarBuilder);
