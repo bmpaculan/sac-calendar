@@ -1,56 +1,31 @@
 {
   "id": "com.example.sac.calendar",
-  "name": "Color-Coded Availability Calendar",
-  "description": "Responsive, legend-driven availability calendar with dynamic legend and SAC data binding.",
-  "vendor": "Your Company",
-  "version": "1.4.0",
+  "name": "Employee Timesheet Calendar",
+  "description": "Color-coded employee timesheet calendar driven by bound Date + Status.",
+  "vendor": "bneXt",
+  "version": "1.0.0",
   "newInstancePrefix": "calendar",
 
   "webcomponents": [
-    {
-      "kind": "main",
-      "tag": "com-example-sac-calendar",
-      "url": "https://cdn.jsdelivr.net/gh/<your-username>/sac-calendar@main/calendar.js",
-      "integrity": "sha256-dev",
-      "ignoreIntegrity": true
-    },
-    {
-      "kind": "styling",
-      "tag": "com-example-sac-calendar-styling",
-      "url": "https://cdn.jsdelivr.net/gh/<your-username>/sac-calendar@main/calendar_styling.js",
-      "integrity": "sha256-dev",
-      "ignoreIntegrity": true
-    },
-    {
-      "kind": "builder",
-      "tag": "com-example-sac-calendar-builder",
-      "url": "https://cdn.jsdelivr.net/gh/<your-username>/sac-calendar@main/calendar_builder.js",
-      "integrity": "sha256-dev",
-      "ignoreIntegrity": true
-    }
+    { "kind": "main",    "tag": "com-example-sac-calendar",          "url": "https://cdn.jsdelivr.net/gh/bmpaculan/sac-calendar@main/calendar.js",           "integrity": "sha256-dev", "ignoreIntegrity": true },
+    { "kind": "styling", "tag": "com-example-sac-calendar-styling",  "url": "https://cdn.jsdelivr.net/gh/bmpaculan/sac-calendar@main/calendar_styling.js",   "integrity": "sha256-dev", "ignoreIntegrity": true },
+    { "kind": "builder", "tag": "com-example-sac-calendar-builder",  "url": "https://cdn.jsdelivr.net/gh/bmpaculan/sac-calendar@main/calendar_builder.js",   "integrity": "sha256-dev", "ignoreIntegrity": true }
   ],
 
   "properties": {
-    "startMonth": { "type": "string", "default": "" },
-    "endMonth":   { "type": "string", "default": "" },
-    "employeeName": { "type": "string", "default": "Employee" },
-    "darkMode": { "type": "boolean", "default": true },
+    "darkMode":      { "type": "boolean", "default": true },
+    "autoLegend":    { "type": "boolean", "default": true },
+    "statusInfoJson":{"type": "string",  "default": "{}" },
+    "paletteJson":   { "type": "string",  "default": "[]" },
 
-    "autoLegend": { "type": "boolean", "default": true },
-    "statusInfoJson": { "type": "string", "default": "{}" },
-    "paletteJson": { "type": "string", "default": "[]" },
-
-    "style_headerBg": { "type": "string", "default": "#f7f9fb" },
-    "style_cardBg":   { "type": "string", "default": "#ffffff" },
-    "style_border":   { "type": "string", "default": "#d9dee2" },
-    "style_text":     { "type": "string", "default": "#37474f" },
-
-    "daysJson": { "type": "string", "default": "{}" }
+    "style_headerBg":{ "type": "string",  "default": "#f7f9fb" },
+    "style_cardBg":  { "type": "string",  "default": "#ffffff" },
+    "style_border":  { "type": "string",  "default": "#d9dee2" },
+    "style_text":    { "type": "string",  "default": "#37474f" }
   },
 
   "dataBindings": {
     "main": {
-      "supportsMainFeed": true,
       "feeds": [
         { "id": "date",   "type": "dimension", "description": "Date (day level)" },
         { "id": "status", "type": "dimension", "description": "Status (text)" }
@@ -58,10 +33,6 @@
     }
   },
 
-  "methods": {
-    "getDataBindings": { "description": "Return current data bindings." },
-    "setDataBindings": { "description": "Set data bindings provided by SAC Builder." }
-  },
-
+  "methods": {},
   "events": {}
 }

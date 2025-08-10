@@ -6,11 +6,9 @@
       *, *::before, *::after { box-sizing: border-box; }
       :host { display:block; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif; color:var(--ink,#37474f); }
       .wrap{max-width:100%}
-      .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-      .legend{display:flex;gap:12px;flex-wrap:wrap}
+      .legend{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 10px}
       .key{display:flex;align-items:center;gap:6px;font-size:.85rem;opacity:.95}
       .swatch{width:12px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.12)}
-      .title{font-size:.9rem;font-weight:600;margin:0 8px 0 0}
 
       .calendars{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
       .cal{border:1px solid var(--bdr,#d9dee2);border-radius:12px;overflow:hidden;background:var(--bg,#fff);display:flex;flex-direction:column;max-width:100%}
@@ -31,10 +29,7 @@
       :host([dark]) .date{color:#e3eef6;background:rgba(20,28,35,.85)}
     </style>
     <div class="wrap">
-      <div class="controls">
-        <div class="title" id="empName"></div>
-        <div class="legend" id="legend"></div>
-      </div>
+      <div class="legend" id="legend"></div>
       <div class="calendars" id="calendars"></div>
     </div>
   `;
@@ -56,7 +51,7 @@
   }
   function tint(hex,a=0.22){const h=(hex||"#999").replace("#","");const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return `rgba(${r},${g},${b},${clamp01(a)})`;}
   function rangeMonths(s,e){const[sy,sm]=s.split("-").map(Number);const[ey,em]=e.split("-").map(Number);let y=sy,m=sm-1,EY=ey,EM=em-1,out=[];if(y>EY||(y===EY&&m>EM))return out;while(y<EY||(y===EY&&m<=EM)){out.push({year:y,month:m});m++;if(m>11){m=0;y++;}}return out;}
-  function monthRangeFromPropsOrData(start,end,map){ if(start&&end) return rangeMonths(start,end); const ks=Object.keys(map).sort(); if(!ks.length) return []; return rangeMonths(ks[0].slice(0,7), ks[ks.length-1].slice(0,7)); }
+  function monthsFromData(map){ const ks=Object.keys(map).sort(); if(!ks.length) return []; return rangeMonths(ks[0].slice(0,7), ks[ks.length-1].slice(0,7)); }
   function uniqueStatuses(map){ return Array.from(new Set(Object.values(map))).filter(Boolean); }
   function resolveLegend({overrides,palette,statuses}){ const legend={...(overrides||{})}; const pal=(Array.isArray(palette)&&palette.length)?palette:["#66bb6a","#e57373","#64b5f6","#ffb74d","#ba68c8","#4db6ac","#ffd54f","#90a4ae","#81c784","#f06292"]; let i=0; statuses.forEach(s=>{ if(!legend[s]) legend[s]=pal[i++%pal.length]; }); return legend; }
 
@@ -101,41 +96,35 @@
       this._shadow = this.attachShadow({mode:'open'});
       this._shadow.appendChild(tpl.content.cloneNode(true));
       this._props = {
-        startMonth:"", endMonth:"", employeeName:"Employee", darkMode:true,
-        autoLegend:true, statusInfoJson:"{}", paletteJson:"[]",
-        style_headerBg:"#f7f9fb", style_cardBg:"#ffffff", style_border:"#d9dee2", style_text:"#37474f",
-        daysJson:"{}"
+        // legend & styling props only
+        darkMode:true, autoLegend:true,
+        statusInfoJson:"{}", paletteJson:"[]",
+        style_headerBg:"#f7f9fb", style_cardBg:"#ffffff", style_border:"#d9dee2", style_text:"#37474f"
       };
       this.$legend = this._shadow.getElementById('legend');
       this.$calendars = this._shadow.getElementById('calendars');
-      this._shadow.getElementById('empName').textContent = "";
-
-      // expose methods for Builder (SAC will call these)
-      this.getDataBindings = () => (this._dataBindings || {});
-      this.setDataBindings = (bindings) => { this._dataBindings = bindings || {}; this._fromBindings(); };
     }
 
     onCustomWidgetBeforeUpdate(changed){ Object.assign(this._props, changed); if (changed.dataBindings) this._dataBindings = changed.dataBindings; }
-    onCustomWidgetAfterUpdate(){ 
-      // theme
+    onCustomWidgetAfterUpdate(){
+      // theme vars
       if (this._props.darkMode) this.setAttribute('dark',''); else this.removeAttribute('dark');
       const root=this._shadow.host.style;
       root.setProperty("--hd", this._props.style_headerBg||"#f7f9fb");
       root.setProperty("--bg", this._props.style_cardBg||"#ffffff");
       root.setProperty("--bdr",this._props.style_border||"#d9dee2");
       root.setProperty("--ink",this._props.style_text||"#37474f");
-      this._shadow.getElementById('empName').textContent=this._props.employeeName||"Employee";
-      // derive data & render
-      this._fromBindings();
-    }
 
-    _fromBindings(){
-      // 1) fallback JSON
-      let jsonDays={}; try{ jsonDays=JSON.parse(this._props.daysJson||"{}"); }catch{}
-      // 2) binding (preferred)
+      // data: binding only (fully data-driven)
       const binding = this.dataBindings?.getDataBinding?.("main") || this._dataBindings?.main || null;
-      const boundDays = readBindingDays(binding);
-      const daysMap = Object.keys(boundDays).length ? boundDays : jsonDays;
+      const daysMap = readBindingDays(binding);
+
+      // if no data, clear UI
+      if (!Object.keys(daysMap).length){
+        this.$legend.innerHTML = "";
+        this.$calendars.innerHTML = "";
+        return;
+      }
 
       // legend
       let overrides={}; try{ overrides=JSON.parse(this._props.statusInfoJson||"{}"); }catch{}
@@ -144,11 +133,13 @@
       this._legend = this._props.autoLegend ? resolveLegend({overrides,palette,statuses})
                                             : (Object.keys(overrides).length?overrides:resolveLegend({overrides:{},palette,statuses}));
       this._days = daysMap;
+
       this._render();
     }
 
     _render(){
       const legend=this._legend||{}; const daysMap=this._days||{};
+
       // legend UI
       this.$legend.innerHTML="";
       Object.entries(legend).forEach(([label,hex])=>{
@@ -158,8 +149,8 @@
         this.$legend.appendChild(key);
       });
 
-      // months
-      const months = monthRangeFromPropsOrData(this._props.startMonth, this._props.endMonth, daysMap);
+      // months from data
+      const months = monthsFromData(daysMap);
       this.$calendars.innerHTML="";
       months.forEach(({year,month})=>{
         const cal=document.createElement("section"); cal.className="cal";
