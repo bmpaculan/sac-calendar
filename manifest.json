@@ -3,14 +3,23 @@
   "name": "Employee Timesheet Calendar",
   "description": "Color-coded employee timesheet calendar driven by bound Date + Status.",
   "vendor": "bneXt",
+  "icon": "https://cdn.jsdelivr.net/gh/bmpaculan/sac-calendar@main/calendar_icon.png",
   "version": "1.0.0",
   "newInstancePrefix": "calendar",
 
   "webcomponents": [
-    { "kind": "main",    "tag": "com-example-sac-calendar",          "url": "https://cdn.jsdelivr.net/gh/bmpaculan/sac-calendar@main/calendar.js",           "integrity": "sha256-dev", "ignoreIntegrity": true },
-    { "kind": "styling", "tag": "com-example-sac-calendar-styling",  "url": "https://cdn.jsdelivr.net/gh/bmpaculan/sac-calendar@main/calendar_styling.js",   "integrity": "sha256-dev", "ignoreIntegrity": true },
-    { "kind": "builder", "tag": "com-example-sac-calendar-builder",  "url": "https://cdn.jsdelivr.net/gh/bmpaculan/sac-calendar@main/calendar_builder.js",   "integrity": "sha256-dev", "ignoreIntegrity": true }
-  ],
+    { "kind": "main",    
+      "tag": "com-example-sac-calendar",          
+      "url": "https://cdn.jsdelivr.net/gh/bmpaculan/sac-calendar@main/calendar.js", 
+      "integrity": "sha256-dev", 
+      "ignoreIntegrity": true },
+
+    { "kind": "styling", 
+      "tag": "com-example-sac-calendar-styling",  
+      "url": "https://cdn.jsdelivr.net/gh/bmpaculan/sac-calendar@main/calendar_styling.js",   
+      "integrity": "sha256-dev", 
+      "ignoreIntegrity": true }
+    ],
 
   "properties": {
     "darkMode":      { "type": "boolean", "default": true },

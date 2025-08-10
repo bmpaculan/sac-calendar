@@ -55,38 +55,57 @@
   function uniqueStatuses(map){ return Array.from(new Set(Object.values(map))).filter(Boolean); }
   function resolveLegend({overrides,palette,statuses}){ const legend={...(overrides||{})}; const pal=(Array.isArray(palette)&&palette.length)?palette:["#66bb6a","#e57373","#64b5f6","#ffb74d","#ba68c8","#4db6ac","#ffd54f","#90a4ae","#81c784","#f06292"]; let i=0; statuses.forEach(s=>{ if(!legend[s]) legend[s]=pal[i++%pal.length]; }); return legend; }
 
-  // read binding rows keyed by FEED ids ("date","status")
-  function rowsFromBinding(binding){
-    const dataBlock = binding?.data?.data ?? binding?.data ?? binding;
-    return Array.isArray(dataBlock?.rows) ? dataBlock.rows
-         : Array.isArray(dataBlock)       ? dataBlock
-         : [];
-  }
-  function readBindingDays(binding){
-    if(!binding) return {};
-    const dataBlock = binding?.data?.data ?? binding?.data ?? binding;
-    const rows = rowsFromBinding(binding);
-    const feedMap = { date:"date", status:"status" };
-    const dimsMeta = binding.dimensions || dataBlock.dimensions || null;
-    if (Array.isArray(dimsMeta)) {
-      feedMap.date   = dimsMeta[0]?.id || "date";
-      feedMap.status = dimsMeta[1]?.id || "status";
+  // ---------- Robust binding reader ----------
+  // 1) Find the first array of rows anywhere inside an object
+  function findRowsBlock(obj){
+    if (!obj || typeof obj !== 'object') return [];
+    if (Array.isArray(obj)) return obj;
+    // common keys SAC uses
+    for (const k of ['rows','data','table','values']) {
+      if (Array.isArray(obj[k])) return obj[k];
     }
-    const out={};
+    // deep search (one level)
+    for (const key in obj) {
+      const v = obj[key];
+      if (v && typeof v === 'object') {
+        const arr = findRowsBlock(v);
+        if (Array.isArray(arr) && arr.length) return arr;
+      }
+    }
+    return [];
+  }
+
+  // 2) Turn rows into {"YYYY-MM-DD": "Status"}
+  function readBindingDays(binding){
+    if (!binding) return {};
+    const rows = findRowsBlock(binding);
+    const dimsMeta = binding.dimensions || binding?.data?.dimensions || null; // if present
+    const feedMap = { date:'date', status:'status' };
+    if (Array.isArray(dimsMeta)) {
+      // prefer ids from meta if available
+      feedMap.date   = dimsMeta[0]?.id || 'date';
+      feedMap.status = dimsMeta[1]?.id || 'status';
+    }
+
+    const out = {};
     rows.forEach(r=>{
-      let d,s;
-      if (r && r.dimensions){
+      let d, s;
+      if (r && r.dimensions) {
+        // { dimensions: { date:..., status:... } }
         d = r.dimensions[feedMap.date]   ?? r.dimensions.date   ?? r.dimensions.Date;
         s = r.dimensions[feedMap.status] ?? r.dimensions.status ?? r.dimensions.Status;
-      } else if (Array.isArray(r)){
-        d=r[0]; s=r[1];
-      } else if (r && typeof r==="object"){
+      } else if (Array.isArray(r)) {
+        // [date, status]
+        d = r[0]; s = r[1];
+      } else if (r && typeof r === 'object') {
+        // { date:..., status:... } (keys might be feed ids)
         d = r[feedMap.date]   ?? r.date   ?? r.Date;
         s = r[feedMap.status] ?? r.status ?? r.Status;
       }
       const iso = toISODate(d);
-      if (iso && s!=null) out[iso]=String(s);
+      if (iso && s!=null) out[iso] = String(s);
     });
+
     return out;
   }
 
@@ -96,7 +115,7 @@
       this._shadow = this.attachShadow({mode:'open'});
       this._shadow.appendChild(tpl.content.cloneNode(true));
       this._props = {
-        // legend & styling props only
+        // legend & styling only
         darkMode:true, autoLegend:true,
         statusInfoJson:"{}", paletteJson:"[]",
         style_headerBg:"#f7f9fb", style_cardBg:"#ffffff", style_border:"#d9dee2", style_text:"#37474f"
@@ -105,21 +124,29 @@
       this.$calendars = this._shadow.getElementById('calendars');
     }
 
-    onCustomWidgetBeforeUpdate(changed){ Object.assign(this._props, changed); if (changed.dataBindings) this._dataBindings = changed.dataBindings; }
+    onCustomWidgetBeforeUpdate(changed){ 
+      Object.assign(this._props, changed); 
+      if (changed.dataBindings) this._dataBindings = changed.dataBindings;
+    }
+
     onCustomWidgetAfterUpdate(){
       // theme vars
       if (this._props.darkMode) this.setAttribute('dark',''); else this.removeAttribute('dark');
       const root=this._shadow.host.style;
-      root.setProperty("--hd", this._props.style_headerBg||"#f7f9fb");
-      root.setProperty("--bg", this._props.style_cardBg||"#ffffff");
-      root.setProperty("--bdr",this._props.style_border||"#d9dee2");
-      root.setProperty("--ink",this._props.style_text||"#37474f");
+      root.setProperty("--hd",  this._props.style_headerBg||"#f7f9fb");
+      root.setProperty("--bg",  this._props.style_cardBg||"#ffffff");
+      root.setProperty("--bdr", this._props.style_border||"#d9dee2");
+      root.setProperty("--ink", this._props.style_text||"#37474f");
 
-      // data: binding only (fully data-driven)
-      const binding = this.dataBindings?.getDataBinding?.("main") || this._dataBindings?.main || null;
+      // try all places SAC may attach the main binding
+      const binding =
+        this.dataBindings?.getDataBinding?.("main") ||
+        this._dataBindings?.main ||
+        this._dataBindings ||
+        null;
+
       const daysMap = readBindingDays(binding);
 
-      // if no data, clear UI
       if (!Object.keys(daysMap).length){
         this.$legend.innerHTML = "";
         this.$calendars.innerHTML = "";
