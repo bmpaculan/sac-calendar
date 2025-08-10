@@ -56,15 +56,12 @@
   function resolveLegend({overrides,palette,statuses}){ const legend={...(overrides||{})}; const pal=(Array.isArray(palette)&&palette.length)?palette:["#66bb6a","#e57373","#64b5f6","#ffb74d","#ba68c8","#4db6ac","#ffd54f","#90a4ae","#81c784","#f06292"]; let i=0; statuses.forEach(s=>{ if(!legend[s]) legend[s]=pal[i++%pal.length]; }); return legend; }
 
   // ---------- Robust binding reader ----------
-  // 1) Find the first array of rows anywhere inside an object
   function findRowsBlock(obj){
     if (!obj || typeof obj !== 'object') return [];
     if (Array.isArray(obj)) return obj;
-    // common keys SAC uses
     for (const k of ['rows','data','table','values']) {
       if (Array.isArray(obj[k])) return obj[k];
     }
-    // deep search (one level)
     for (const key in obj) {
       const v = obj[key];
       if (v && typeof v === 'object') {
@@ -75,38 +72,47 @@
     return [];
   }
 
-  // 2) Turn rows into {"YYYY-MM-DD": "Status"}
-  function readBindingDays(binding){
-    if (!binding) return {};
-    const rows = findRowsBlock(binding);
-    const dimsMeta = binding.dimensions || binding?.data?.dimensions || null; // if present
+  function rowsToDays(rows, dimsMeta){
     const feedMap = { date:'date', status:'status' };
     if (Array.isArray(dimsMeta)) {
-      // prefer ids from meta if available
       feedMap.date   = dimsMeta[0]?.id || 'date';
       feedMap.status = dimsMeta[1]?.id || 'status';
     }
-
     const out = {};
     rows.forEach(r=>{
       let d, s;
       if (r && r.dimensions) {
-        // { dimensions: { date:..., status:... } }
         d = r.dimensions[feedMap.date]   ?? r.dimensions.date   ?? r.dimensions.Date;
         s = r.dimensions[feedMap.status] ?? r.dimensions.status ?? r.dimensions.Status;
       } else if (Array.isArray(r)) {
-        // [date, status]
         d = r[0]; s = r[1];
       } else if (r && typeof r === 'object') {
-        // { date:..., status:... } (keys might be feed ids)
         d = r[feedMap.date]   ?? r.date   ?? r.Date;
         s = r[feedMap.status] ?? r.status ?? r.Status;
       }
       const iso = toISODate(d);
       if (iso && s!=null) out[iso] = String(s);
     });
-
     return out;
+  }
+
+  async function loadDaysFromBinding(binding){
+    if (!binding) return {};
+    try {
+      // OSE: fetch rows explicitly
+      if (typeof binding.getData === 'function') {
+        const payload = await binding.getData();
+        const rows = findRowsBlock(payload);
+        const dims = payload.dimensions || payload?.data?.dimensions || binding.dimensions || null;
+        return rowsToDays(rows, dims);
+      }
+    } catch (e) {
+      // fallback to whatever is already on the binding
+      console.warn("getData() failed, falling back to static binding payload", e);
+    }
+    const rows = findRowsBlock(binding);
+    const dims = binding.dimensions || binding?.data?.dimensions || null;
+    return rowsToDays(rows, dims);
   }
 
   class SacCalendar extends HTMLElement {
@@ -115,20 +121,16 @@
       this._shadow = this.attachShadow({mode:'open'});
       this._shadow.appendChild(tpl.content.cloneNode(true));
       this._props = {
-        // legend & styling only
         darkMode:true, autoLegend:true,
         statusInfoJson:"{}", paletteJson:"[]",
         style_headerBg:"#f7f9fb", style_cardBg:"#ffffff", style_border:"#d9dee2", style_text:"#37474f"
       };
       this.$legend = this._shadow.getElementById('legend');
       this.$calendars = this._shadow.getElementById('calendars');
+      this._renderPending = false;
     }
 
-    onCustomWidgetBeforeUpdate(changed){ 
-      Object.assign(this._props, changed); 
-      if (changed.dataBindings) this._dataBindings = changed.dataBindings;
-    }
-
+    onCustomWidgetBeforeUpdate(changed){ Object.assign(this._props, changed); }
     onCustomWidgetAfterUpdate(){
       // theme vars
       if (this._props.darkMode) this.setAttribute('dark',''); else this.removeAttribute('dark');
@@ -138,30 +140,38 @@
       root.setProperty("--bdr", this._props.style_border||"#d9dee2");
       root.setProperty("--ink", this._props.style_text||"#37474f");
 
-      // try all places SAC may attach the main binding
-      const binding =
-        this.dataBindings?.getDataBinding?.("main") ||
-        this._dataBindings?.main ||
-        this._dataBindings ||
-        null;
-
-      const daysMap = readBindingDays(binding);
-
-      if (!Object.keys(daysMap).length){
-        this.$legend.innerHTML = "";
-        this.$calendars.innerHTML = "";
+      // load binding every update (covers first assignment & subsequent filter changes)
+      const db = this.dataBindings?.getDataBinding?.("main");
+      if (!db) {
+        this._clear();
         return;
       }
+      // avoid overlapping loads if SAC fires multiple updates quickly
+      if (this._renderPending) return;
+      this._renderPending = true;
 
-      // legend
-      let overrides={}; try{ overrides=JSON.parse(this._props.statusInfoJson||"{}"); }catch{}
-      let palette=[];  try{ palette =JSON.parse(this._props.paletteJson||"[]"); }catch{}
-      const statuses = uniqueStatuses(daysMap);
-      this._legend = this._props.autoLegend ? resolveLegend({overrides,palette,statuses})
-                                            : (Object.keys(overrides).length?overrides:resolveLegend({overrides:{},palette,statuses}));
-      this._days = daysMap;
+      loadDaysFromBinding(db).then(daysMap => {
+        this._renderPending = false;
+        if (!Object.keys(daysMap).length){ this._clear(); return; }
 
-      this._render();
+        // legend
+        let overrides={}; try{ overrides=JSON.parse(this._props.statusInfoJson||"{}"); }catch{}
+        let palette=[];  try{ palette =JSON.parse(this._props.paletteJson||"[]"); }catch{}
+        const statuses = uniqueStatuses(daysMap);
+        this._legend = this._props.autoLegend ? resolveLegend({overrides,palette,statuses})
+                                              : (Object.keys(overrides).length?overrides:resolveLegend({overrides:{},palette,statuses}));
+        this._days = daysMap;
+        this._render();
+      }).catch(err=>{
+        this._renderPending = false;
+        console.error("Failed to load binding data:", err);
+        this._clear();
+      });
+    }
+
+    _clear(){
+      this.$legend.innerHTML = "";
+      this.$calendars.innerHTML = "";
     }
 
     _render(){
