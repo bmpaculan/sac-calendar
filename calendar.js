@@ -222,6 +222,7 @@
     onCustomWidgetDestroy(){}
   }
 
-  customElements.define('com-example-sac-calendar', SacCalendar);
+  customElements.define('com-example-time-calendar-1-x', SacCalendar);
 })();
+
 
