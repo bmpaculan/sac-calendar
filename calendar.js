@@ -132,8 +132,10 @@
 
     onCustomWidgetBeforeUpdate(changed){ Object.assign(this._props, changed); }
     onCustomWidgetAfterUpdate(){
+      console.log("getData() Test Trigger1", e);
       // theme vars
       if (this._props.darkMode) this.setAttribute('dark',''); else this.removeAttribute('dark');
+      console.log("getData() Test Trigger2", e);
       const root=this._shadow.host.style;
       root.setProperty("--hd",  this._props.style_headerBg||"#f7f9fb");
       root.setProperty("--bg",  this._props.style_cardBg||"#ffffff");
@@ -143,17 +145,19 @@
       // load binding every update (covers first assignment & subsequent filter changes)
       const db = this.dataBindings?.getDataBinding?.("main");
       if (!db) {
+        console.log("getData() Test Trigger3", e);
         this._clear();
         return;
       }
       // avoid overlapping loads if SAC fires multiple updates quickly
       if (this._renderPending) return;
+      console.log("getData() Test Trigger4", e);
       this._renderPending = true;
 
       loadDaysFromBinding(db).then(daysMap => {
         this._renderPending = false;
         if (!Object.keys(daysMap).length){ this._clear(); return; }
-
+        console.log("getData() Test Trigger5", e);
         // legend
         let overrides={}; try{ overrides=JSON.parse(this._props.statusInfoJson||"{}"); }catch{}
         let palette=[];  try{ palette =JSON.parse(this._props.paletteJson||"[]"); }catch{}
@@ -164,7 +168,7 @@
         this._render();
       }).catch(err=>{
         this._renderPending = false;
-        console.error("Failed to load binding data:", err);
+        console.log("Failed to load binding data:", err);
         this._clear();
       });
     }
@@ -220,3 +224,4 @@
 
   customElements.define('com-example-sac-calendar', SacCalendar);
 })();
+
